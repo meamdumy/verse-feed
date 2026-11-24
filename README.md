@@ -23,6 +23,8 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 ## Motion
 - Like tiktok
 
+## Contact me on Discord for any problems or requested changes; my username is *meamdumy1*
+
 
 
 ## Anything down here is from Claude
