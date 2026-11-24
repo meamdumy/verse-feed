@@ -11,11 +11,11 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 
 
 ## Features
-- **Bottom bar** Just like tiktok
+- **Bottom bar**: Just like tiktok
 - **Today's verse in context**: See the daily verse(just a random one), scroll to see the context without losing your place
 - **Read**: swipe up/down through the whole Bible one verse at a time; remembers where you stopped. 
 - **Shuffle**: read verses at random
-- **Browse / Go to**: you can look stuff up
+- **Browse**: you can look stuff up
 - **Settings**: Dark/Light Mode, change translation
 - **Translation**: WEB or BSB. (NIV ripoffs that are open source)
 - Android 8.0+ (API 26).
