@@ -4,7 +4,7 @@ An offline, verse-by-verse Bible feed for Android with two public-domain transla
 World English Bible (WEB) and the Berean Standard Bible (BSB).
 No accounts, ads, subscriptions, AI, or network access (the app requests no permissions).
 
-<img width="1224" height="2992" alt="Screenshot_20261124-003506_Verse Feed" src="https://github.com/user-attachments/assets/fca2d181-df01-40fb-a9aa-a0ecdd7ed838" /> <img width="1224" height="2992" alt="Screenshot_20261124-003503_Verse Feed" src="https://github.com/user-attachments/assets/53f01df6-570d-406f-aa7c-058da1ff33ec" /> <img width="1224" height="2992" alt="Screenshot_20261124-003459_Verse Feed" src="https://github.com/user-attachments/assets/630833cb-f3ea-460c-886c-7fb4a9c2f5dd" />
+<img width="244.8" height="598.4" alt="Screenshot_20261124-003506_Verse Feed" src="https://github.com/user-attachments/assets/fca2d181-df01-40fb-a9aa-a0ecdd7ed838" /> <img width="244.8" height="598.4" alt="Screenshot_20261124-003503_Verse Feed" src="https://github.com/user-attachments/assets/53f01df6-570d-406f-aa7c-058da1ff33ec" /> <img width="244.8" height="598.4" alt="Screenshot_20261124-003459_Verse Feed" src="https://github.com/user-attachments/assets/630833cb-f3ea-460c-886c-7fb4a9c2f5dd" />
 
 
 
