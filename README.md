@@ -23,7 +23,10 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 ## Motion
 - Like tiktok
 
-(The rest was claude)
+
+
+**Anything down here is from Claude**
+
 
 ## Install
 Download the APK from the [Releases page](../../releases/latest), open it on your phone, and allow
