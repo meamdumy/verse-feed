@@ -1,0 +1,19 @@
+# Signing key and its password: never publish these. Anyone holding them could ship
+# "updates" that Android would accept over the real app.
+signing/
+*.jks
+*.keystore
+keystore-password.txt
+
+# Build output (recreated by build.ps1); APKs are published as GitHub Release assets instead.
+build/
+dist/
+*.apk
+*.idsig
+
+# Editor / OS clutter
+.idea/
+.vscode/
+*.iml
+Thumbs.db
+.DS_Store

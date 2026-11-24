@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark UI (used with the "Colorful" and "Blur dark" backgrounds). Surfaces are frosted glass
+     over the shared background. -->
+<resources>
+    <color name="bg">#FF0E0F12</color>
+    <color name="surface">#1FFFFFFF</color>
+    <color name="sheet">#F21C1D24</color>
+    <color name="track">#33000000</color>
+    <color name="scrim_top">#CC0B0B0E</color>
+    <color name="stroke">#29FFFFFF</color>
+    <color name="text">#FFF2F1F6</color>
+    <color name="subtext">#FFB3B1BD</color>
+</resources>

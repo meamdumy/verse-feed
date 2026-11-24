@@ -1,0 +1,3 @@
+# Keep the Bible texts byte-for-byte as published (no line-ending conversion).
+assets/*.txt -text
+assets/*.htm -text

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light UI (used with the "Blur light" background). Surfaces are frosted glass over the
+     shared background. -->
+<resources>
+    <color name="bg">#FFF4F5F7</color>
+    <color name="surface">#A6FFFFFF</color>
+    <color name="sheet">#F7FFFFFF</color>
+    <color name="track">#14000000</color>
+    <color name="scrim_top">#E6F4F5F7</color>
+    <color name="stroke">#1F000000</color>
+    <color name="text">#FF1C1B1F</color>
+    <color name="subtext">#FF5F5C68</color>
+    <color name="accent_a">#FF3730A3</color>
+    <color name="accent_b">#FF7C3AED</color>
+    <color name="ic_bg">#FF1E1B4B</color>
+</resources>
