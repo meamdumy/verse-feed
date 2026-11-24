@@ -1,0 +1,16 @@
+Verse Feed
+Copyright (c) 2026 meamdumy. The app's source code is licensed under the MIT License (LICENSE).
+
+Third-party material included in this repository:
+
+- World English Bible (assets/web.txt, assets/web_about.htm), from eBible.org. Public domain.
+  "World English Bible" is a trademark of eBible.org; the text is included unchanged.
+
+- Berean Standard Bible (assets/bsb.txt, assets/bsb_about.htm), from eBible.org.
+  Public domain (BSB Publishing, LLC). Two conversion artifacts were tidied: stray spaces left
+  before punctuation where footnote markers had been removed, and a missing space in EPH 3:14.
+
+- Material Icons by Google: res/drawable/ic_home.xml, ic_read.xml, ic_search.xml and
+  ic_settings.xml. Licensed under the Apache License, Version 2.0:
+  https://www.apache.org/licenses/LICENSE-2.0
+  The Shuffle icon (res/drawable/ic_shuffle.xml) is original to this project.

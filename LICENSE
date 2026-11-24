@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The MIT License above covers this app's source code. The Bible texts in assets/ are in the
-public domain (see the "Text" section of README.md). The Home, Read (book), Search and
-Settings icons are Material Icons by Google, licensed under the Apache License 2.0; the Shuffle
-icon is original to this project.
