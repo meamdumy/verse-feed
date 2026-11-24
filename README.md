@@ -25,7 +25,7 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 
 
 
-**Anything down here is from Claude**
+## Anything down here is from Claude
 
 
 ## Install
