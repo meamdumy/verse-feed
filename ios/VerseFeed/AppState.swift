@@ -56,7 +56,7 @@ final class AppState: ObservableObject {
 
     func flashForSync() {
         syncFlash = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.syncFlash = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.syncFlash = false }
     }
 
     let backdrop = Backdrop()
