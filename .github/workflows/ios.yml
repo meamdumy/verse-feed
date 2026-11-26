@@ -120,3 +120,81 @@ jobs:
         with:
           name: VerseFeed-screenshots
           path: ios/shots
+
+  # Records the simulator screen while a UI test drives every animated interaction, then cuts the
+  # video into frame strips around each step so the animations can be checked frame by frame.
+  animations:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen and ffmpeg
+        run: brew install xcodegen ffmpeg
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Boot an iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -E "^ +iPhone 16 \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          if [ -z "$DEVICE" ]; then DEVICE=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'); fi
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryLevel 100 --cellularBars 4 || true
+
+      - name: Build for testing
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project VerseFeed.xcodeproj -scheme VerseFeed \
+            -destination "id=$DEVICE" -derivedDataPath simtest CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+
+      - name: Record the animation tour
+        working-directory: ios
+        run: |
+          xcrun simctl io "$DEVICE" recordVideo --codec h264 --force tour.mp4 > rec.log 2>&1 &
+          REC=$!
+          for i in $(seq 1 100); do grep -q "Recording started" rec.log && break; sleep 0.1; done
+          python3 -c 'import time; print(time.time())' > start.txt
+          xcodebuild test-without-building -project VerseFeed.xcodeproj -scheme VerseFeed \
+            -destination "id=$DEVICE" -derivedDataPath simtest CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | tee test.log | grep -E "STEP |Test Case|error:|XCTAssert|failed" || true
+          sleep 1
+          kill -INT $REC; wait $REC || true
+          ls -lh tour.mp4
+
+      - name: Cut frame strips around each step
+        working-directory: ios
+        run: |
+          mkdir -p frames
+          python3 - <<'EOF'
+          import re, subprocess
+          start = float(open("start.txt").read().strip())
+          steps = []
+          for line in open("test.log", errors="ignore"):
+              m = re.search(r"STEP (\S+) (\d+\.\d+)", line)
+              if m and (m.group(1), m.group(2)) not in [(s[0], s[1]) for s in steps]:
+                  steps.append((m.group(1), m.group(2)))
+          for i, (name, t) in enumerate(steps):
+              off = max(0.0, float(t) - start - 0.1)
+              dur = 2.4 if name in ("swipe-slow", "pull-daily") else 1.4
+              out = f"frames/{i:02d}-{name}.png"
+              subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{off:.2f}", "-t", f"{dur}",
+                              "-i", "tour.mp4", "-vf",
+                              "fps=8,scale=200:-1,tile=12x1:padding=4:margin=4:color=white",
+                              "-frames:v", "1", out], check=False)
+              print(name, f"{off:.2f}s", out)
+          EOF
+          ls frames
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: VerseFeed-animations
+          path: |
+            ios/frames
+            ios/tour.mp4
+            ios/test.log
