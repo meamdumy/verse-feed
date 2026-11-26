@@ -16,7 +16,7 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 - **Read**: swipe up/down through the whole Bible one verse at a time; remembers where you stopped. 
 - **Shuffle**: read verses at random
 - **Browse**: you can look stuff up
-- **Settings**: Dark/Light Mode, change translation
+- **Settings**: Dark/Light/Colorful(my fav) Mode, change translation
 - **Translation**: WEB or BSB. (NIV ripoffs that are open source)
 - Android 8.0+ (API 26), or iPhone with iOS 17+.
 
