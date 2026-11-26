@@ -173,18 +173,29 @@ jobs:
           mkdir -p frames
           python3 - <<'EOF'
           import re, subprocess
-          # Anchor on when recording stopped (exact) and the video's length, rather than on when
-          # it started (the recorder begins capturing a few seconds before it reports it).
-          stop = float(open("stop.txt").read().strip())
-          dur_out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                    "-of", "default=nw=1:nk=1", "tour.mp4"], capture_output=True, text=True).stdout
-          start = stop - float(dur_out.strip())
-          print("video starts at", start, "length", dur_out.strip())
           steps = []
           for line in open("test.log", errors="ignore"):
               m = re.search(r"STEP (\S+) (\d+\.\d+)", line)
               if m and (m.group(1), m.group(2)) not in [(s[0], s[1]) for s in steps]:
                   steps.append((m.group(1), m.group(2)))
+          # The simulator recorder's clock can't be matched to the test's, so find a known event in
+          # the video: the Home -> Read push is the first big screen change after the app has sat
+          # idle on Home for a few seconds. Every step is placed relative to it.
+          info = subprocess.run(["ffmpeg", "-i", "tour.mp4", "-vf", "select='gt(scene,0.06)',showinfo",
+                                 "-f", "null", "-"], capture_output=True, text=True).stderr
+          changes = [float(x) for x in re.findall(r"pts_time:([0-9.]+)", info)]
+          anchor = None
+          prev = None
+          for c in changes:
+              if prev is not None and c - prev > 2.5 and c > 2.0:
+                  anchor = c
+                  break
+              prev = c
+          if anchor is None and changes:
+              anchor = changes[0]
+          t_read = float(dict(steps)["tab-read"])
+          print("big changes:", [round(c, 2) for c in changes[:12]], "anchor (Home->Read push):", anchor)
+          start = t_read + 0.12 - anchor  # the tap lands ~0.12 s after the STEP line
           for i, (name, t) in enumerate(steps):
               off = max(0.0, float(t) - start - 0.1)
               dur = 2.4 if name in ("swipe-slow", "pull-daily") else 1.2
