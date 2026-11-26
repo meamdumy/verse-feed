@@ -110,8 +110,9 @@ struct PageView: View {
     let onShare: () -> Void
     let onContext: () -> Void
 
-    // Arrival choreography: the box lands first, words start once it has, the buttons come last.
-    private static let boxEnd = 0.30, wordsStart = 0.30, wordsEnd = 0.85, buttonsStart = 0.55, buttonsEnd = 0.90
+    // Arrival choreography over the whole swipe: the box fades in first, the words follow as it
+    // lands, the buttons come last. A leaving page plays it in reverse.
+    private static let boxEnd = 0.55, wordsStart = 0.40, wordsEnd = 0.92, buttonsStart = 0.60, buttonsEnd = 0.95
 
     var body: some View {
         let r = model.progress
@@ -160,9 +161,10 @@ struct PageView: View {
         }
         .padding(.top, metrics.top + 64)
         .padding(.bottom, metrics.bottom + bottomInset)
-        // Depth: pages shrink and dim slightly as they move away from the centre.
+        // Depth: pages shrink as they move away from the centre and fade out completely at the
+        // screen's edge, so verses and their boxes fade in and out as you scroll.
         .scaleEffect(0.92 + 0.08 * r)
-        .opacity(0.5 + 0.5 * r)
+        .opacity(r)
     }
 
     /// The verse with its words fading in one after another, in reading order.
@@ -401,6 +403,10 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
         if dir == -1 && drag < 0 { dir = 0 }
         if dir == 1 && keys[2] == nil { dir = 0 }
         if dir == -1 && keys[0] == nil { dir = 0 }
+        if dir != 0 { // tick the moment you let go and the page is committed to turning
+            haptic.impactOccurred()
+            haptic.prepare()
+        }
         settle(dir, speed: dir == 0 ? 0 : abs(vy))
     }
 
@@ -469,8 +475,6 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
             bind(0)
         }
         layoutPages()
-        haptic.impactOccurred() // light tick per page
-        haptic.prepare()
         if let k = keys[1] { onPageChanged(k) }
     }
 

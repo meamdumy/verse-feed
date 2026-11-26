@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 enum FeedMode: Int {
     case read = 0
@@ -209,15 +211,49 @@ final class AppState: ObservableObject {
         withAnimation(.easeIn(duration: 0.18)) { settingsOpen = false }
     }
 
-    /// The theme changes at the peak of a quick blur, then everything sharpens into the new look.
+    /// Applies the theme at once: a picture of the old look covers the screen, blurs and fades
+    /// away, while the new look underneath sharpens into focus. (Blurring the live screen made its
+    /// edges see-through, which flashed.)
     func setTheme(_ t: ThemeStyle) {
         guard t != theme else { return }
         defaults.set(t.rawValue, forKey: "bg_style")
-        withAnimation(.easeIn(duration: 0.12)) { themeBlur = 18 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            self.theme = t
-            withAnimation(.easeOut(duration: 0.34)) { self.themeBlur = 0 }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        guard !UIAccessibility.isReduceMotionEnabled, let window = scene?.keyWindow else {
+            theme = t
+            return
         }
+        let bounds = window.bounds
+        let shot = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+            window.drawHierarchy(in: bounds, afterScreenUpdates: false)
+        }
+        let cover = UIView(frame: bounds) // also blocks taps while it fades
+        let sharp = UIImageView(image: shot)
+        sharp.frame = bounds
+        let soft = UIImageView(image: AppState.blurred(shot, radius: 22))
+        soft.frame = bounds
+        soft.alpha = 0
+        cover.addSubview(sharp)
+        cover.addSubview(soft)
+        window.addSubview(cover)
+
+        theme = t
+        themeBlur = 12
+        withAnimation(.easeOut(duration: 0.45)) { themeBlur = 0 }
+        UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseIn], animations: { soft.alpha = 1 }) { _ in
+            UIView.animate(withDuration: 0.32, delay: 0, options: [.curveEaseOut], animations: { cover.alpha = 0 }) { _ in
+                cover.removeFromSuperview()
+            }
+        }
+    }
+
+    private static func blurred(_ image: UIImage, radius: Double) -> UIImage {
+        guard let input = CIImage(image: image) else { return image }
+        let filter = CIFilter.gaussianBlur()
+        filter.inputImage = input.clampedToExtent()
+        filter.radius = Float(radius * Double(image.scale))
+        guard let output = filter.outputImage?.cropped(to: input.extent),
+              let cg = CIContext().createCGImage(output, from: input.extent) else { return image }
+        return UIImage(cgImage: cg, scale: image.scale, orientation: .up)
     }
 
     /// Loads the new translation in the background; the reading spot is kept by book/chapter/verse.

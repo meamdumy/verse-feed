@@ -62,6 +62,9 @@ struct HomeScreen: View {
                                 .font(.system(size: 17, weight: .bold))
                                 .foregroundStyle(Accent.b)
                                 .offset(y: bob ? -6 : 0)
+                                // The endless bob is scoped to the arrow alone; started with a
+                                // global withAnimation it also caught the screen's transitions.
+                                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: bob)
                             Text(pull >= trigger ? "Release to open today\u{2019}s verse" : "Swipe up to read today\u{2019}s verse in context")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(pull >= trigger ? c.text : c.subtext)
@@ -112,7 +115,7 @@ struct HomeScreen: View {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                     if !UIAccessibility.isReduceMotionEnabled {
-                        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { bob = true }
+                        DispatchQueue.main.async { bob = true } // after the screen's transition starts
                     }
                     app.backdrop.animate(to: Palettes.forVerse(daily)) // Colorful: today's verse's colours
                 }
