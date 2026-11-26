@@ -1,6 +1,6 @@
 # Verse Feed
 
-An offline, verse-by-verse Bible tiktok-esque feed for Android
+An offline, verse-by-verse Bible tiktok-esque feed for Android and iPhone
 No accounts, ads, subscriptions, AI, or network access (the app requests no permissions). 
 This is the alternative to BibleScroll that helps with the scrolling addiction. Frickin' BibleScroll.
 
@@ -18,7 +18,7 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 - **Browse**: you can look stuff up
 - **Settings**: Dark/Light Mode, change translation
 - **Translation**: WEB or BSB. (NIV ripoffs that are open source)
-- Android 8.0+ (API 26).
+- Android 8.0+ (API 26), or iPhone with iOS 17+.
 
 ## Motion
 - Like tiktok
@@ -31,13 +31,45 @@ This is the alternative to BibleScroll that helps with the scrolling addiction. 
 
 
 ## Install
-Download the APK from the [Releases page](../../releases/latest), open it on your phone, and allow
-"install unknown apps" for your browser or file manager when prompted. If you build it yourself,
-the APK lands in `dist/VerseFeed-<version>.apk`. Or, with USB debugging on:
+Both files are on the [latest release](../../releases/latest): `VerseFeed.apk` for Android,
+`VerseFeed.ipa` for iPhone.
+
+### Android
+1. On your phone, download `VerseFeed.apk` from the [latest release](../../releases/latest).
+2. Open it, and allow "Install unknown apps" for your browser or file manager when asked.
+3. Tap **Install**. Later versions install over it and keep your place and settings.
+
+If you build it yourself, the APK lands in `dist/VerseFeed-<version>.apk`. Or, with USB debugging
+on:
 
     adb install -r dist/VerseFeed-2.6.apk
 
+### iPhone (iOS 17+)
+Verse Feed isn't on the App Store, so you install the `.ipa` yourself ("sideloading") with your
+own Apple ID. A free Apple ID works. You need a Windows PC or a Mac and a USB cable.
+
+1. Download `VerseFeed.ipa` from the [latest release](../../releases/latest) to your computer.
+2. Install [Sideloadly](https://sideloadly.io). On Windows, also install **iTunes** and
+   **iCloud** from Apple's website (the Microsoft Store versions don't work with Sideloadly).
+3. Plug in your iPhone, unlock it, and tap **Trust** when it asks about this computer.
+4. Open Sideloadly. Pick your iPhone, drag `VerseFeed.ipa` into the window, type your Apple ID
+   email, and click **Start**. Enter your Apple ID password, and the verification code if asked.
+   These go only to Apple, which uses them to sign the app for your phone. Some people use a
+   spare Apple ID for this.
+5. On the iPhone, turn on Developer Mode: **Settings > Privacy & Security > Developer Mode**,
+   then restart and confirm. (The option appears after the first install attempt.)
+6. Trust your Apple ID: **Settings > General > VPN & Device Management**, tap your Apple ID,
+   then **Trust**.
+7. Open Verse Feed from the home screen.
+
+With a free Apple ID the app stops opening after **7 days**. Plug the phone in and run
+Sideloadly again with the same `.ipa` to renew it; your place and settings are kept. A free
+Apple ID can have up to 3 sideloaded apps at a time. A paid Apple Developer account signs it
+for a year. [AltStore](https://altstore.io) works too, and can renew the app over Wi-Fi.
+
 ## Build
+
+### Android
 Needs the Android SDK (build-tools + a platform) and a JDK 17+ (`JAVA_HOME`). No Gradle.
 
     powershell -ExecutionPolicy Bypass -File build.ps1 -VersionName 2.7 -VersionCode 18
@@ -48,6 +80,21 @@ key, or Android will refuse to install them over the existing app. A fresh clone
 its first build makes a new one; its APKs can't update an install signed with a different key.
 Raise `-VersionCode` for each update.
 
+### iPhone
+The iOS app is a native SwiftUI version in `ios/`, with its Xcode project described by
+`ios/project.yml` ([XcodeGen](https://github.com/yonaskolb/XcodeGen)). It reads the same
+`assets/*.txt` texts as the Android app.
+
+- **No Mac:** every push that touches `ios/` runs the **iOS build** workflow on GitHub's macOS
+  runners (`.github/workflows/ios.yml`). The unsigned `.ipa` is in the run's `VerseFeed-ipa`
+  artifact. You can also start it by hand from the Actions tab.
+- **On a Mac** with Xcode 16+:
+
+      brew install xcodegen
+      cd ios && xcodegen generate && open VerseFeed.xcodeproj
+
+  Pick your team under Signing & Capabilities to run it on your own iPhone.
+
 ## Layout
 - `src/com/versefeed/Bible.java`: loads a translation and handles lookups and verse-text search.
 - `src/com/versefeed/RefSearch.java`: turns typed references ("jn 3:16") into results.
@@ -57,6 +104,10 @@ Raise `-VersionCode` for each update.
 - `src/com/versefeed/WordReveal.java`: the word-by-word fade-in.
 - `src/com/versefeed/FeedBackground.java`: the blending gradient and blurred-bubble backdrops.
 - `src/com/versefeed/MainActivity.java`: home, feed, browse and search screens, transitions.
+- `ios/VerseFeed/`: the iPhone app (SwiftUI). `Feed.swift` is the swipe pager (a port of
+  `VersePager`), `AppState.swift` holds navigation and settings, `Background.swift` the
+  backdrops, and `Bible.swift`, `RefSearch.swift` and `Paginator.swift` match their Java
+  counterparts.
 - `assets/web.txt`: WEB text from eBible.org (`engwebp_vpl`), unmodified; see `assets/web_about.htm`.
 - `assets/bsb.txt`: BSB text from eBible.org (`engbsb_vpl`); see `assets/bsb_about.htm`. Two
   conversion artifacts were tidied: 29 stray spaces left before punctuation where footnote
