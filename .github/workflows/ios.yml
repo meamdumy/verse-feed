@@ -1,0 +1,67 @@
+# Builds the iOS app on GitHub's macOS runners and produces an unsigned .ipa.
+# Install it with Sideloadly / AltStore (they sign it with your Apple ID).
+name: iOS build
+
+on:
+  push:
+    branches: [main, ios-app]
+    paths:
+      - "ios/**"
+      - "assets/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build (unsigned, for iPhone)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project VerseFeed.xcodeproj \
+            -scheme VerseFeed \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | grep -E "error:|warning: .*deprecated|\*\* BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/VerseFeed.app
+
+      - name: Show compiler errors
+        if: failure()
+        working-directory: ios
+        run: grep -E "error:" build.log | sort -u | head -60 || true
+
+      - name: Package .ipa
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/VerseFeed.app Payload/
+          zip -qry VerseFeed-unsigned.ipa Payload
+          ls -lh VerseFeed-unsigned.ipa
+          shasum -a 256 VerseFeed-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VerseFeed-ipa
+          path: ios/VerseFeed-unsigned.ipa
+          if-no-files-found: error
