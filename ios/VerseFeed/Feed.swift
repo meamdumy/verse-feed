@@ -217,8 +217,10 @@ final class PageController: UIHostingController<PageView> {
 final class FeedController: UIViewController, UIGestureRecognizerDelegate {
     private static let distanceThreshold: CGFloat = 0.12
     private static let flingThreshold: CGFloat = 180 // points per second
-    private static let minSettle: Double = 0.09
-    private static let maxSettle: Double = 0.20
+    /// Scales every page-settle duration (0.88 = 12% snappier than the Android timings).
+    private static let snap: Double = 0.88
+    private static let minSettle: Double = 0.09 * snap
+    private static let maxSettle: Double = 0.20 * snap
     private static let decelerate: Double = 1.5
 
     private let source: FeedSource
@@ -424,8 +426,8 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
             return
         }
         var t: Double
-        if speed > 0 { t = 2 * FeedController.decelerate * Double(dist / speed) } // match initial speed
-        else { t = 0.11 + 0.09 * Double(dist / h) }
+        if speed > 0 { t = 2 * FeedController.decelerate * Double(dist / speed) * FeedController.snap } // ~finger speed
+        else { t = (0.11 + 0.09 * Double(dist / h)) * FeedController.snap }
         t = max(FeedController.minSettle, min(FeedController.maxSettle, t))
         settleFrom = drag
         settleTo = to
