@@ -163,6 +163,7 @@ jobs:
             -destination "id=$DEVICE" -derivedDataPath simtest CODE_SIGNING_ALLOWED=NO 2>&1 \
             | tee test.log | grep -E "STEP |Test Case|error:|XCTAssert|failed" || true
           sleep 1
+          python3 -c 'import time; print(time.time())' > stop.txt
           kill -INT $REC; wait $REC || true
           ls -lh tour.mp4
 
@@ -172,7 +173,13 @@ jobs:
           mkdir -p frames
           python3 - <<'EOF'
           import re, subprocess
-          start = float(open("start.txt").read().strip())
+          # Anchor on when recording stopped (exact) and the video's length, rather than on when
+          # it started (the recorder begins capturing a few seconds before it reports it).
+          stop = float(open("stop.txt").read().strip())
+          dur_out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                    "-of", "default=nw=1:nk=1", "tour.mp4"], capture_output=True, text=True).stdout
+          start = stop - float(dur_out.strip())
+          print("video starts at", start, "length", dur_out.strip())
           steps = []
           for line in open("test.log", errors="ignore"):
               m = re.search(r"STEP (\S+) (\d+\.\d+)", line)
@@ -180,11 +187,12 @@ jobs:
                   steps.append((m.group(1), m.group(2)))
           for i, (name, t) in enumerate(steps):
               off = max(0.0, float(t) - start - 0.1)
-              dur = 2.4 if name in ("swipe-slow", "pull-daily") else 1.4
+              dur = 2.4 if name in ("swipe-slow", "pull-daily") else 1.2
+              fps = 5 if dur > 2 else 10
               out = f"frames/{i:02d}-{name}.png"
               subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{off:.2f}", "-t", f"{dur}",
                               "-i", "tour.mp4", "-vf",
-                              "fps=8,scale=200:-1,tile=12x1:padding=4:margin=4:color=white",
+                              f"fps={fps},scale=200:-1,tile=12x1:padding=4:margin=4:color=white",
                               "-frames:v", "1", out], check=False)
               print(name, f"{off:.2f}s", out)
           EOF
