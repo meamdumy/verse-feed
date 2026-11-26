@@ -20,12 +20,11 @@ struct RootView: View {
             BackgroundView(backdrop: app.backdrop, style: app.theme)
 
             if let bible = app.bible {
-                ZStack {
-                    screen(bible)
-                        .id(app.screenID)
-                        .transition(app.fadeTransition ? .opacity : .push(from: app.pushEdge))
-                }
-                .clipped()
+                // No clipping here: it would follow the safe area and slice pages off under the
+                // status bar. The window already clips the sliding screens.
+                screen(bible)
+                    .id(app.screenID)
+                    .transition(.push(from: app.pushEdge))
 
                 if !app.screen.isFeed { StatusFade(light: app.theme.isLight) }
 
@@ -169,7 +168,7 @@ struct SettingsOverlay: View {
                     Text(app.translationStatus)
                         .font(.system(size: 13)).foregroundStyle(c.subtext)
                         .padding(.top, 8).padding(.leading, 4)
-                        .animation(.easeInOut(duration: 0.2), value: app.translationStatus)
+                        .transaction { $0.animation = nil } // changes in place, no ghosting
                 }
                 .popIn(shown, delay: 0.10)
 

@@ -305,12 +305,35 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
         super.viewSafeAreaInsetsDidChange()
         if metrics.top != view.safeAreaInsets.top { metrics.top = view.safeAreaInsets.top }
         if metrics.bottom != view.safeAreaInsets.bottom { metrics.bottom = view.safeAreaInsets.bottom }
+        layoutEdgeFade()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         for pc in pages.compactMap({ $0 }) { pc.view.bounds = CGRect(origin: .zero, size: view.bounds.size) }
         layoutPages()
+        layoutEdgeFade()
+    }
+
+    /// Verses and their boxes dissolve as they slide toward the top of the screen or down under the
+    /// bottom bar, instead of being cut off by an edge.
+    private let edgeFade = CAGradientLayer()
+
+    private func layoutEdgeFade() {
+        let h = view.bounds.height
+        guard h > 0 else { return }
+        let top = view.safeAreaInsets.top
+        let barTop = h - view.safeAreaInsets.bottom - bottomInset + 8 // where the bottom bar begins
+        // A resting page never reaches these bands (its padding keeps the box below top + 64 and
+        // the buttons above barTop - 8), so only moving content fades.
+        let stops: [CGFloat] = [top - 6, top + 60, barTop - 6, barTop + 34]
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        edgeFade.frame = view.bounds
+        edgeFade.colors = [UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+        edgeFade.locations = stops.map { NSNumber(value: Double(max(0, min(1, $0 / h)))) }
+        if view.layer.mask !== edgeFade { view.layer.mask = edgeFade }
+        CATransaction.commit()
     }
 
     // MARK: pages

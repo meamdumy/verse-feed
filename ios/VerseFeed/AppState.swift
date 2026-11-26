@@ -1,7 +1,5 @@
 import SwiftUI
 import UIKit
-import CoreImage
-import CoreImage.CIFilterBuiltins
 
 enum FeedMode: Int {
     case read = 0
@@ -47,7 +45,6 @@ final class AppState: ObservableObject {
     @Published var translationStatus = ""
     @Published var homeScrollToBottom = false
     @Published var homeScrollToTop = 0 // bumped when Home is tapped while already on Home
-    @Published var fadeTransition = false // next screen change crossfades instead of pushing
     @Published var counterVerse: Int? // the feed's "verse x/N"; lives outside the sliding screens
     private var browseReturn: Screen = .home // where Books' back arrow goes
 
@@ -106,7 +103,6 @@ final class AppState: ObservableObject {
     /// slides fully out the other side, so the see-through screens never overlap.
     func go(_ s: Screen, from edge: Edge) {
         pushEdge = edge
-        fadeTransition = false
         DispatchQueue.main.async {
             withAnimation(.snappy(duration: 0.32)) {
                 self.screen = s
@@ -211,52 +207,42 @@ final class AppState: ObservableObject {
         withAnimation(.easeIn(duration: 0.18)) { settingsOpen = false }
     }
 
-    /// Applies the theme at once: a picture of the old look covers the screen, blurs and fades
-    /// away, while the new look underneath sharpens into focus. (Blurring the live screen made its
-    /// edges see-through, which flashed.)
+    /// A live picture of the screen as it is right now, laid over the app (it also blocks taps).
+    /// `snapshotView` comes from the render server, so blurs, glass and the animated background are
+    /// all in it (drawing the window into an image renders those black).
+    private func coverScreen() -> UIView? {
+        guard !UIAccessibility.isReduceMotionEnabled,
+              let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first?.keyWindow,
+              let cover = window.snapshotView(afterScreenUpdates: false) else { return nil }
+        cover.frame = window.bounds
+        window.addSubview(cover)
+        return cover
+    }
+
+    private func dissolve(_ cover: UIView, duration: Double, delay: Double = 0) {
+        UIView.animate(withDuration: duration, delay: delay, options: [.curveEaseInOut, .allowUserInteraction],
+                       animations: { cover.alpha = 0 }) { _ in cover.removeFromSuperview() }
+    }
+
+    /// Applies the theme at once under a picture of the old look, which then dissolves away while
+    /// the new look sharpens out of a soft blur. Both layers are fully opaque, so nothing flashes
+    /// through.
     func setTheme(_ t: ThemeStyle) {
         guard t != theme else { return }
         defaults.set(t.rawValue, forKey: "bg_style")
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        guard !UIAccessibility.isReduceMotionEnabled, let window = scene?.keyWindow else {
+        guard let cover = coverScreen() else {
             theme = t
             return
         }
-        let bounds = window.bounds
-        let shot = UIGraphicsImageRenderer(bounds: bounds).image { _ in
-            window.drawHierarchy(in: bounds, afterScreenUpdates: false)
-        }
-        let cover = UIView(frame: bounds) // also blocks taps while it fades
-        let sharp = UIImageView(image: shot)
-        sharp.frame = bounds
-        let soft = UIImageView(image: AppState.blurred(shot, radius: 22))
-        soft.frame = bounds
-        soft.alpha = 0
-        cover.addSubview(sharp)
-        cover.addSubview(soft)
-        window.addSubview(cover)
-
         theme = t
-        themeBlur = 12
-        withAnimation(.easeOut(duration: 0.45)) { themeBlur = 0 }
-        UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseIn], animations: { soft.alpha = 1 }) { _ in
-            UIView.animate(withDuration: 0.32, delay: 0, options: [.curveEaseOut], animations: { cover.alpha = 0 }) { _ in
-                cover.removeFromSuperview()
-            }
-        }
-    }
-
-    private static func blurred(_ image: UIImage, radius: Double) -> UIImage {
-        guard let input = CIImage(image: image) else { return image }
-        let filter = CIFilter.gaussianBlur()
-        filter.inputImage = input.clampedToExtent()
-        filter.radius = Float(radius * Double(image.scale))
-        guard let output = filter.outputImage?.cropped(to: input.extent),
-              let cg = CIContext().createCGImage(output, from: input.extent) else { return image }
-        return UIImage(cgImage: cg, scale: image.scale, orientation: .up)
+        themeBlur = 10
+        withAnimation(.easeOut(duration: 0.5)) { themeBlur = 0 }
+        dissolve(cover, duration: 0.4)
     }
 
     /// Loads the new translation in the background; the reading spot is kept by book/chapter/verse.
+    /// The screen then swaps to the new text in one step under a picture of the old one, which
+    /// dissolves away (a crossfade of two see-through screens would show both at once).
     func setTranslation(_ t: Translation) {
         guard t != translation, let old = bible else { return }
         translation = t
@@ -265,9 +251,12 @@ final class AppState: ObservableObject {
         let gen = translationGen
         translationStatus = "Loading \(t.title)\u{2026}"
         let readPos = self.readPos
+        let tapped = CACurrentMediaTime()
         DispatchQueue.global(qos: .userInitiated).async {
             let nb = Bible.load(t)
-            DispatchQueue.main.async {
+            // Let the option highlight finish gliding first, so it isn't frozen in the picture.
+            let wait = max(0, 0.32 - (CACurrentMediaTime() - tapped))
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
                 guard gen == self.translationGen else { return }
                 if let p = readPos {
                     self.defaults.set(nb.indexAtOrAfter(old.book[p], old.chapter[p], old.verse[p]), forKey: "read_pos")
@@ -276,12 +265,15 @@ final class AppState: ObservableObject {
                 self.defaults.set(0, forKey: "shuffle_part")
                 self.defaults.set(min(self.defaults.integer(forKey: "shuffle_pos"), nb.count - 1), forKey: "shuffle_pos")
                 self.shuffleOrder = nil
-                self.fadeTransition = true // the screen underneath crossfades to the new text
-                withAnimation(.easeInOut(duration: 0.3)) {
+                let cover = self.coverScreen()
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) {
                     self.bible = nb
                     self.screenID = UUID()
+                    self.translationStatus = "\(nb.translation.title)  \u{2713}"
                 }
-                self.translationStatus = "\(nb.translation.title)  \u{2713}"
+                if let cover { self.dissolve(cover, duration: 0.3, delay: 0.03) }
             }
         }
     }
