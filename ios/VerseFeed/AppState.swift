@@ -17,6 +17,11 @@ enum Screen: Equatable {
     case chapters(Int)
     case verses(Int, Int)
 
+    var isFeed: Bool {
+        if case .feed = self { return true }
+        return false
+    }
+
     /// Which bottom-bar tab this screen belongs to.
     var tab: Int {
         switch self {
@@ -39,6 +44,10 @@ final class AppState: ObservableObject {
     @Published var themeBlur: CGFloat = 0
     @Published var translationStatus = ""
     @Published var homeScrollToBottom = false
+    @Published var homeScrollToTop = 0 // bumped when Home is tapped while already on Home
+    @Published var fadeTransition = false // next screen change crossfades instead of pushing
+    @Published var counterVerse: Int? // the feed's "verse x/N"; lives outside the sliding screens
+    private var browseReturn: Screen = .home // where Books' back arrow goes
 
     let backdrop = Backdrop()
     let defaults = UserDefaults.standard
@@ -85,6 +94,8 @@ final class AppState: ObservableObject {
     /// slides fully out the other side, so the see-through screens never overlap.
     func go(_ s: Screen, from edge: Edge) {
         pushEdge = edge
+        fadeTransition = false
+        if case .feed = s {} else { counterVerse = nil }
         DispatchQueue.main.async {
             withAnimation(.snappy(duration: 0.32)) {
                 self.screen = s
@@ -98,7 +109,9 @@ final class AppState: ObservableObject {
         if settingsOpen { closeSettings() }
         let cur = screen.tab
         if tab == cur {
-            if tab == 0, case .feed = screen { leaveDaily(toBottom: false) }
+            if tab == 0 {
+                if case .feed = screen { leaveDaily(toBottom: false) } else { homeScrollToTop += 1 }
+            }
             return
         }
         let edge: Edge = tab > cur ? .trailing : .leading
@@ -106,7 +119,9 @@ final class AppState: ObservableObject {
         case 0: go(.home, from: edge)
         case 1: go(.feed(.read, -1), from: edge)
         case 2: go(.feed(.shuffle, -1), from: edge)
-        default: go(.books, from: edge)
+        default:
+            if case .feed(let m, _) = screen { browseReturn = .feed(m, -1) } else { browseReturn = .home }
+            go(.books, from: edge)
         }
     }
 
@@ -115,7 +130,7 @@ final class AppState: ObservableObject {
         switch screen {
         case .feed(let m, _):
             if m == .daily { leaveDaily(toBottom: true) } else { go(.home, from: .leading) }
-        case .books: go(.home, from: .leading)
+        case .books: go(browseReturn, from: .leading)
         case .chapters: go(.books, from: .leading)
         case .verses(let b, _):
             if let bible, bible.chapterCount(b) == 1 { go(.books, from: .leading) } else { go(.chapters(b), from: .leading) }
@@ -214,7 +229,8 @@ final class AppState: ObservableObject {
                 self.defaults.set(0, forKey: "shuffle_part")
                 self.defaults.set(min(self.defaults.integer(forKey: "shuffle_pos"), nb.count - 1), forKey: "shuffle_pos")
                 self.shuffleOrder = nil
-                withAnimation(.easeInOut(duration: 0.25)) {
+                self.fadeTransition = true // the screen underneath crossfades to the new text
+                withAnimation(.easeInOut(duration: 0.3)) {
                     self.bible = nb
                     self.screenID = UUID()
                 }

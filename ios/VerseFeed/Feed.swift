@@ -384,21 +384,18 @@ struct FeedScreen: View {
 
     var body: some View {
         let colors = app.feed
-        FeedPager(session: session, colors: colors, bottomInset: 84, backdrop: app.backdrop,
+        FeedPager(session: session, colors: colors, bottomInset: BottomBar.contentInset + 8, backdrop: app.backdrop,
                   onPageChanged: { key in
                       let d = app.defaults
                       d.set(FeedSource.seq(key), forKey: mode.posKey)
                       d.set(FeedSource.part(key), forKey: mode.partKey)
                       session.counterVerse = session.source.verse(key)
+                      app.counterVerse = session.counterVerse
                   },
                   onShare: { app.share($0) },
                   onContext: { v in app.go(.feed(.read, v), from: .leading) })
             .ignoresSafeArea()
-            .overlay(alignment: .top) {
-                VerseCounter(bible: session.source.bible, verseIndex: session.counterVerse, colors: colors,
-                             light: app.theme.isLight)
-                    .padding(.top, 6)
-            }
+            .onAppear { app.counterVerse = session.counterVerse }
     }
 }
 
@@ -426,6 +423,17 @@ struct VerseCounter: View {
         .overlay(Capsule().stroke(light ? Color.black.opacity(0.08) : Color.white.opacity(0.12), lineWidth: 1))
         .environment(\.colorScheme, light ? .light : .dark)
         .transaction { $0.animation = nil }
+    }
+}
+
+extension View {
+    /// Fades, lifts and pops a view in after `delay` once `shown` turns true.
+    func popIn(_ shown: Bool, delay: Double) -> some View {
+        self
+            .opacity(shown ? 1 : 0)
+            .scaleEffect(shown ? 1 : 0.94)
+            .offset(y: shown ? 0 : 12)
+            .animation(.easeOut(duration: 0.2).delay(delay), value: shown)
     }
 }
 

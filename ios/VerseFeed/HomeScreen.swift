@@ -62,9 +62,9 @@ struct HomeScreen: View {
                                 .font(.system(size: 17, weight: .bold))
                                 .foregroundStyle(Accent.b)
                                 .offset(y: bob ? -6 : 0)
-                            Text(pull > trigger * 0.6 ? "Keep going\u{2026}" : "Swipe up to read today\u{2019}s verse in context")
+                            Text(pull >= trigger ? "Release to open today\u{2019}s verse" : "Swipe up to read today\u{2019}s verse in context")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(pull > trigger * 0.6 ? c.text : c.subtext)
+                                .foregroundStyle(pull >= trigger ? c.text : c.subtext)
                         }
                         .scaleEffect(1 + 0.08 * min(1, pull / trigger))
                         .frame(maxWidth: .infinity)
@@ -81,7 +81,7 @@ struct HomeScreen: View {
                             .id("bottom")
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 92) // room for the bottom bar
+                    .padding(.bottom, BottomBar.contentInset + 12) // room for the bottom bar
                     .frame(minHeight: outer.size.height, alignment: .top)
                 }
                 .scrollBounceBehavior(.always)
@@ -89,13 +89,22 @@ struct HomeScreen: View {
                 .coordinateSpace(name: "home")
                 .onPreferenceChange(BottomEdgeKey.self) { maxY in
                     // Past the bottom, iOS lets the page bounce up: that overshoot is the pull.
-                    let over = (outer.size.height - 92) - maxY
-                    pull = max(0, over)
-                    if over > trigger && !opened {
+                    let over = max(0, (outer.size.height - BottomBar.contentInset - 12) - maxY)
+                    if (over >= trigger) != (pull >= trigger) {
+                        UISelectionFeedbackGenerator().selectionChanged() // tick when it's far enough
+                    }
+                    pull = over
+                }
+                // Like Android: it opens when you let go, if you pulled far enough.
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in
+                    if pull >= trigger && !opened {
                         opened = true
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         app.openDaily()
                     }
+                })
+                .onChange(of: app.homeScrollToTop) { _, _ in
+                    withAnimation(.snappy) { proxy.scrollTo("top", anchor: .top) }
                 }
                 .onAppear {
                     if app.homeScrollToBottom {

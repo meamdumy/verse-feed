@@ -23,9 +23,23 @@ struct RootView: View {
                 ZStack {
                     screen(bible)
                         .id(app.screenID)
-                        .transition(.push(from: app.pushEdge))
+                        .transition(app.fadeTransition ? .opacity : .push(from: app.pushEdge))
                 }
                 .clipped()
+
+                if !app.screen.isFeed { StatusFade(light: app.theme.isLight) }
+
+                // The feed's verse counter sits outside the sliding screens, so it stays put when
+                // you switch between Read, Shuffle and today's verse.
+                if let v = app.counterVerse, app.screen.isFeed {
+                    VStack {
+                        VerseCounter(bible: bible, verseIndex: v, colors: app.feed, light: app.theme.isLight)
+                            .padding(.top, 6)
+                        Spacer()
+                    }
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+                }
             } else {
                 ProgressView().tint(app.ui.text)
             }
@@ -67,12 +81,16 @@ struct BottomBar: View {
     @EnvironmentObject var app: AppState
     @Namespace private var ns
 
+    /// Height the bar takes above the home indicator; screens keep their content clear of it.
+    static let contentInset: CGFloat = 70
+
     private let icons = ["house.fill", "book.closed.fill", "shuffle", "magnifyingglass"]
     private let names = ["Home", "Read", "Shuffle", "Go to"]
 
     var body: some View {
         let active = app.screen.tab
         let c = app.ui
+        let light = app.theme.isLight
         HStack(spacing: 0) {
             ForEach(0..<4, id: \.self) { i in
                 Button { app.selectTab(i) } label: {
@@ -81,18 +99,18 @@ struct BottomBar: View {
                             if i == active {
                                 Capsule()
                                     .fill(Accent.gradient)
-                                    .frame(width: 30, height: 4)
+                                    .frame(width: 32, height: 4)
                                     .matchedGeometryEffect(id: "indicator", in: ns)
                             } else {
-                                Color.clear.frame(width: 30, height: 4)
+                                Color.clear.frame(width: 32, height: 4)
                             }
                         }
                         .padding(.bottom, 9)
                         Image(systemName: icons[i])
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(.system(size: 30, weight: .semibold))
                             .foregroundStyle(i == active ? c.text : c.subtext)
-                            .scaleEffect(i == active ? 1 : 0.92)
-                            .frame(height: 30)
+                            .scaleEffect(i == active ? 1 : 0.9)
+                            .frame(height: 36)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 4)
@@ -103,10 +121,12 @@ struct BottomBar: View {
                 .accessibilityLabel(names[i])
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.72), value: active)
+        .animation(.spring(response: 0.32, dampingFraction: 0.62), value: active)
         .background {
+            // Glass, tinted like the Android bar: deep dark glass, or bright frosted white.
             Rectangle()
                 .fill(.ultraThinMaterial)
+                .overlay(light ? Color.white.opacity(0.55) : Color.black.opacity(0.5))
                 .overlay(alignment: .top) { Rectangle().fill(c.stroke).frame(height: 0.5) }
                 .ignoresSafeArea(edges: .bottom)
         }
@@ -116,6 +136,7 @@ struct BottomBar: View {
 /// The settings card. It grows out of the gear (top right of Home) while the screen dims.
 struct SettingsOverlay: View {
     @EnvironmentObject var app: AppState
+    @State private var shown = false
 
     var body: some View {
         let c = app.ui
@@ -127,19 +148,27 @@ struct SettingsOverlay: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Settings").font(.system(size: 20, weight: .bold)).foregroundStyle(c.text)
+                    .popIn(shown, delay: 0.06)
 
-                label("Translation")
-                Segmented(options: Translation.allCases.map(\.abbr),
-                          selected: app.translation.rawValue) { app.setTranslation(Translation(rawValue: $0) ?? .web) }
-                Text(app.translationStatus)
-                    .font(.system(size: 13)).foregroundStyle(c.subtext)
-                    .padding(.top, 8).padding(.leading, 4)
-                    .animation(.easeInOut(duration: 0.2), value: app.translationStatus)
+                VStack(alignment: .leading, spacing: 0) {
+                    label("Translation")
+                    Segmented(options: Translation.allCases.map(\.abbr),
+                              selected: app.translation.rawValue) { app.setTranslation(Translation(rawValue: $0) ?? .web) }
+                    Text(app.translationStatus)
+                        .font(.system(size: 13)).foregroundStyle(c.subtext)
+                        .padding(.top, 8).padding(.leading, 4)
+                        .animation(.easeInOut(duration: 0.2), value: app.translationStatus)
+                }
+                .popIn(shown, delay: 0.10)
 
-                label("Theme")
-                Segmented(options: ThemeStyle.allCases.map(\.label),
-                          selected: app.theme.rawValue) { app.setTheme(ThemeStyle(rawValue: $0) ?? .colorful) }
+                VStack(alignment: .leading, spacing: 0) {
+                    label("Theme")
+                    Segmented(options: ThemeStyle.allCases.map(\.label),
+                              selected: app.theme.rawValue) { app.setTheme(ThemeStyle(rawValue: $0) ?? .colorful) }
+                }
+                .popIn(shown, delay: 0.145)
             }
+            .onAppear { shown = true }
             .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 20)
             .frame(width: min(360, UIScreen.main.bounds.width - 24))
             .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(c.sheet))

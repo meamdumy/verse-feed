@@ -32,10 +32,27 @@ private struct BrowseScaffold<Content: View>: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 6)
-            .padding(.bottom, 100)
+            .padding(.bottom, BottomBar.contentInset + 16)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
+    }
+}
+
+/// A soft fade behind the status bar so scrolled content doesn't run under the clock
+/// (placed at the top of the window by RootView).
+struct StatusFade: View {
+    let light: Bool
+    var body: some View {
+        let top = light ? Color(red: 0.957, green: 0.961, blue: 0.969).opacity(0.9)
+                        : Color(red: 0.043, green: 0.043, blue: 0.055).opacity(0.8)
+        VStack(spacing: 0) {
+            LinearGradient(colors: [top, top.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 14)
+                .ignoresSafeArea(edges: .top) // grows up to cover the status bar
+            Spacer()
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -96,7 +113,7 @@ struct BooksScreen: View {
 
     var body: some View {
         let c = app.ui
-        BrowseScaffold(title: "Books", subtitle: nil, showBack: false) {
+        BrowseScaffold(title: "Books", subtitle: nil, showBack: true) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(c.subtext)
                 TextField("", text: $query, prompt: Text("Search: John 3:16, Ps 23, or words").foregroundStyle(c.subtext))
