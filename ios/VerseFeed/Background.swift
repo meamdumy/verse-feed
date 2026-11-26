@@ -86,18 +86,18 @@ private struct ColorfulBackground: View {
         TimelineView(.animation) { ctx in
             let time = ctx.date.timeIntervalSinceReferenceDate
             GeometryReader { geo in
-                let w = geo.size.width, h = geo.size.height
-                let big = max(w, h) * 1.1
-                let tr = backdrop.travel
+                let w = Double(geo.size.width), h = Double(geo.size.height)
+                let big: Double = max(w, h) * 1.1
+                let tr: Double = backdrop.travel
+                let x1: Double = w * (0.18 + 0.10 * sin(time * 0.21))
+                let y1: Double = h * (0.22 + 0.10 * sin(tr * 0.7) + 0.05 * cos(time * 0.17))
+                let x2: Double = w * (0.86 + 0.08 * cos(time * 0.19 + 1.3))
+                let y2: Double = h * (0.80 + 0.10 * cos(tr * 0.55) + 0.05 * sin(time * 0.15))
                 ZStack {
                     LinearGradient(colors: [backdrop.palette.a.color, backdrop.palette.b.color],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
-                    glow(size: big)
-                        .position(x: w * (0.18 + 0.10 * sin(time * 0.21)),
-                                  y: h * (0.22 + 0.10 * sin(tr * 0.7) + 0.05 * cos(time * 0.17)))
-                    glow(size: big)
-                        .position(x: w * (0.86 + 0.08 * cos(time * 0.19 + 1.3)),
-                                  y: h * (0.80 + 0.10 * cos(tr * 0.55) + 0.05 * sin(time * 0.15)))
+                    glow(size: big).position(x: x1, y: y1)
+                    glow(size: big).position(x: x2, y: y2)
                 }
             }
         }
@@ -145,16 +145,19 @@ private struct BubbleBackground: View {
                 let rect = CGRect(origin: .zero, size: size)
                 g.fill(Path(rect), with: .linearGradient(Gradient(colors: base), startPoint: .zero,
                                                         endPoint: CGPoint(x: size.width * 0.35, y: size.height)))
-                let unit = min(size.width, size.height)
+                let W = Double(size.width), H = Double(size.height)
+                let unit: Double = min(W, H)
                 for b in bubbles {
-                    let r = b.r * unit
-                    let span = size.height + 2 * r
-                    var y = b.y * span - time * b.speed - travel * b.depth * size.height * 0.35
+                    let r: Double = b.r * unit
+                    let span: Double = H + 2 * r
+                    let rise: Double = time * b.speed
+                    let parallax: Double = travel * b.depth * H * 0.35
+                    var y: Double = b.y * span - rise - parallax
                     y = y.truncatingRemainder(dividingBy: span)
                     if y < 0 { y += span }
                     y -= r
-                    let x = b.x * size.width + sin(time * 0.35 + b.phase) * b.sway
-                    let a = b.alpha
+                    let x: Double = b.x * W + sin(time * 0.35 + b.phase) * b.sway
+                    let a: Double = b.alpha
                     let shading = GraphicsContext.Shading.radialGradient(
                         Gradient(stops: [
                             .init(color: Color.white.opacity(a), location: 0),
