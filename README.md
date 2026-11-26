@@ -1,6 +1,6 @@
 # Verse Feed
 
-An offline, verse-by-verse Bible tiktok-esqu feed for Android
+An offline, verse-by-verse Bible tiktok-esque feed for Android
 No accounts, ads, subscriptions, AI, or network access (the app requests no permissions). 
 This is the alternative to BibleScroll that helps with the scrolling addiction. Frickin' BibleScroll.
 
