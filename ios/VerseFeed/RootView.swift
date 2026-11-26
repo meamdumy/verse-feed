@@ -54,6 +54,18 @@ struct RootView: View {
                 SettingsOverlay()
                     .zIndex(2)
             }
+
+            if app.uiTest { // test runs only: lines the recorded video up with the test's steps
+                Button("SyncFlash") { app.flashForSync() }
+                    .frame(width: 44, height: 44)
+                    .opacity(0.02)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.top, 120)
+                    .zIndex(3)
+                if app.syncFlash {
+                    Color(red: 1, green: 0, blue: 1).ignoresSafeArea().zIndex(4)
+                }
+            }
         }
         .blur(radius: app.themeBlur)
         .preferredColorScheme(app.theme.isLight ? .light : .dark)

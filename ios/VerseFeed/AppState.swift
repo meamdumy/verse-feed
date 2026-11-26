@@ -49,6 +49,16 @@ final class AppState: ObservableObject {
     @Published var counterVerse: Int? // the feed's "verse x/N"; lives outside the sliding screens
     private var browseReturn: Screen = .home // where Books' back arrow goes
 
+    /// UI-test runs only (launched with `-uitest YES`): a hidden button flashes the screen magenta
+    /// so the recorded video can be lined up with the test's steps. Never shown normally.
+    let uiTest = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["uitest"] != nil
+    @Published var syncFlash = false
+
+    func flashForSync() {
+        syncFlash = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.syncFlash = false }
+    }
+
     let backdrop = Backdrop()
     let defaults = UserDefaults.standard
     private var shuffleOrder: [Int]?

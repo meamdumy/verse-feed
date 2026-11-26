@@ -20,9 +20,12 @@ final class AnimationTour: XCTestCase {
     func testTour() {
         continueAfterFailure = true
         app = XCUIApplication()
-        app.launchArguments = ["-bg_style", "0"]
+        app.launchArguments = ["-bg_style", "0", "-uitest", "YES"]
         app.launch()
         pause(4)
+
+        // Magenta flash: CI finds it in the video to line every step up exactly.
+        step("sync"); tap("SyncFlash"); pause(1.5)
 
         // Home -> Read: push transition, then the first verse's box/words/buttons intro.
         step("tab-read"); tap("Read"); pause(2)
