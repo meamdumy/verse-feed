@@ -55,8 +55,25 @@ final class AppState: ObservableObject {
                 self.bible = b
                 self.translationStatus = b.translation.title
                 self.backdrop.animate(to: Palettes.forVerse(self.dailyIndex))
+                self.applyLaunchScreen()
             }
         }
+    }
+
+    /// For automated screenshots only: `-startScreen read|shuffle|daily|books|chapters|settings`
+    /// passed on launch opens that screen directly. Normal launches never set it.
+    private func applyLaunchScreen() {
+        guard let s = defaults.volatileDomain(forName: UserDefaults.argumentDomain)["startScreen"] as? String else { return }
+        switch s {
+        case "read": screen = .feed(.read, 0)
+        case "shuffle": screen = .feed(.shuffle, 0)
+        case "daily": screen = .feed(.daily, dailyIndex)
+        case "books": screen = .books
+        case "chapters": screen = .chapters(Bible.psalms)
+        case "settings": settingsOpen = true
+        default: break
+        }
+        screenID = UUID()
     }
 
     var ui: UIColors { UIColors.of(theme) }

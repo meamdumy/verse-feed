@@ -65,3 +65,58 @@ jobs:
           name: VerseFeed-ipa
           path: ios/VerseFeed-unsigned.ipa
           if-no-files-found: error
+
+  # Runs the app in an iPhone simulator and screenshots each screen in each theme,
+  # so the UI can be checked without a Mac or iPhone.
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build for the simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project VerseFeed.xcodeproj -scheme VerseFeed -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath simbuild CODE_SIGNING_ALLOWED=NO build 2>&1 | tail -5
+
+      - name: Boot an iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -E "^ +iPhone 16 \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          if [ -z "$DEVICE" ]; then DEVICE=$(xcrun simctl list devices available | grep -E "^ +iPhone" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'); fi
+          echo "DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryLevel 100 --cellularBars 4 || true
+
+      - name: Take screenshots
+        working-directory: ios
+        run: |
+          mkdir -p shots
+          xcrun simctl install "$DEVICE" simbuild/Build/Products/Debug-iphonesimulator/VerseFeed.app
+          shoot() { # name, theme, screen
+            xcrun simctl terminate "$DEVICE" com.versefeed.ios 2>/dev/null || true
+            xcrun simctl launch "$DEVICE" com.versefeed.ios -bg_style "$2" -startScreen "$3" > /dev/null
+            sleep 6
+            xcrun simctl io "$DEVICE" screenshot "shots/$1.png" > /dev/null
+          }
+          for theme in 0 1 2; do
+            for screen in home read shuffle daily books chapters settings; do
+              shoot "t${theme}-${screen}" "$theme" "$screen"
+            done
+          done
+          ls shots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VerseFeed-screenshots
+          path: ios/shots
