@@ -44,6 +44,7 @@ final class Backdrop: NSObject, ObservableObject {
         blendTo = p
         blendStart = CACurrentMediaTime()
         let l = CADisplayLink(target: self, selector: #selector(step))
+        l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         l.add(to: .main, forMode: .common)
         link = l
     }

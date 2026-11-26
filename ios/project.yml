@@ -41,6 +41,8 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIApplicationSupportsIndirectInputEvents: true
+        # Opt in to 120 Hz on ProMotion iPhones (otherwise apps are capped at 60 fps).
+        CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:

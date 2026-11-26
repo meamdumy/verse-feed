@@ -435,6 +435,7 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
         settleStart = CACurrentMediaTime()
         settleDuration = t
         let link = CADisplayLink(target: self, selector: #selector(settleStep))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         settleLink = link
     }
@@ -488,6 +489,7 @@ final class FeedController: UIViewController, UIGestureRecognizerDelegate {
               let pc = pages[1], pc.model.progress < 1 else { return }
         introStart = CACurrentMediaTime()
         let link = CADisplayLink(target: self, selector: #selector(introStep))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         link.add(to: .main, forMode: .common)
         introLink = link
     }
