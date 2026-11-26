@@ -66,7 +66,6 @@ struct RootView: View {
                 }
             }
         }
-        .blur(radius: app.themeBlur, opaque: true) // opaque: no see-through edges while blurred
         .preferredColorScheme(app.theme.isLight ? .light : .dark)
     }
 

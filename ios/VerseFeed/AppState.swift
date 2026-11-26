@@ -41,7 +41,6 @@ final class AppState: ObservableObject {
     @Published var theme: ThemeStyle
     @Published var translation: Translation
     @Published var settingsOpen = false
-    @Published var themeBlur: CGFloat = 0
     @Published var translationStatus = ""
     @Published var homeScrollToBottom = false
     @Published var homeScrollToTop = 0 // bumped when Home is tapped while already on Home
@@ -224,20 +223,17 @@ final class AppState: ObservableObject {
                        animations: { cover.alpha = 0 }) { _ in cover.removeFromSuperview() }
     }
 
-    /// Applies the theme at once under a picture of the old look, which then dissolves away while
-    /// the new look sharpens out of a soft blur. Both layers are fully opaque, so nothing flashes
-    /// through.
+    /// Applies the theme at once under a picture of the old look, which then dissolves away.
+    /// The live screen is never blurred: SwiftUI's blur over the whole app rendered the animated
+    /// background and the glass bar black for a moment.
     func setTheme(_ t: ThemeStyle) {
         guard t != theme else { return }
         defaults.set(t.rawValue, forKey: "bg_style")
-        guard let cover = coverScreen() else {
-            theme = t
-            return
-        }
-        theme = t
-        themeBlur = 10
-        withAnimation(.easeOut(duration: 0.5)) { themeBlur = 0 }
-        dissolve(cover, duration: 0.4)
+        let cover = coverScreen()
+        var tx = Transaction()
+        tx.disablesAnimations = true // the tap's spring must not animate the colours underneath
+        withTransaction(tx) { theme = t }
+        if let cover { dissolve(cover, duration: 0.45, delay: 0.03) }
     }
 
     /// Loads the new translation in the background; the reading spot is kept by book/chapter/verse.
