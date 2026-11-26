@@ -37,7 +37,7 @@ struct RootView: View {
                             .padding(.top, 6)
                         Spacer()
                     }
-                    .transition(.opacity)
+                    .transition(.push(from: app.pushEdge))
                     .allowsHitTesting(false)
                 }
             } else {

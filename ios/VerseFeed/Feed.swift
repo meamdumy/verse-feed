@@ -94,8 +94,16 @@ final class PageModel: ObservableObject {
     }
 }
 
+/// The screen's safe-area insets, shared by all pages. Pages ignore their own safe area (it would
+/// change as they slide off screen and make them jitter) and pad by these instead.
+final class PageMetrics: ObservableObject {
+    @Published var top: CGFloat = 0
+    @Published var bottom: CGFloat = 0
+}
+
 struct PageView: View {
     @ObservedObject var model: PageModel
+    @ObservedObject var metrics: PageMetrics
     let colors: FeedColors
     let showContext: Bool
     let bottomInset: CGFloat
@@ -150,8 +158,8 @@ struct PageView: View {
             .offset(y: (1 - btn) * 10)
             Spacer(minLength: 0)
         }
-        .padding(.top, 64)
-        .padding(.bottom, bottomInset)
+        .padding(.top, metrics.top + 64)
+        .padding(.bottom, metrics.bottom + bottomInset)
         // Depth: pages shrink and dim slightly as they move away from the centre.
         .scaleEffect(0.92 + 0.08 * r)
         .opacity(0.5 + 0.5 * r)
@@ -186,11 +194,12 @@ struct PageView: View {
 final class PageController: UIHostingController<PageView> {
     let model: PageModel
 
-    init(model: PageModel, colors: FeedColors, showContext: Bool, bottomInset: CGFloat,
+    init(model: PageModel, metrics: PageMetrics, colors: FeedColors, showContext: Bool, bottomInset: CGFloat,
          onShare: @escaping () -> Void, onContext: @escaping () -> Void) {
         self.model = model
-        super.init(rootView: PageView(model: model, colors: colors, showContext: showContext,
+        super.init(rootView: PageView(model: model, metrics: metrics, colors: colors, showContext: showContext,
                                       bottomInset: bottomInset, onShare: onShare, onContext: onContext))
+        safeAreaRegions = []
         view.backgroundColor = .clear
     }
 
@@ -199,11 +208,18 @@ final class PageController: UIHostingController<PageView> {
 
 // MARK: - Pager
 
-/// Full-screen vertical pager using iOS's own paging scroll (UIPageViewController), so it feels
-/// native. Watches the scroll to drive each page's arrival, the background blend and haptics.
-final class FeedController: UIViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+/// Full-screen vertical pager, a direct port of the Android app's VersePager so it feels the same:
+/// the page follows your finger; a quick flick or a drag past 12% of the screen turns the page;
+/// pages settle in 90-200 ms starting at your finger's speed; touching a settling page finishes it
+/// so swipes chain; the ends rubber-band. Only three pages exist (previous, current, next).
+final class FeedController: UIViewController, UIGestureRecognizerDelegate {
+    private static let distanceThreshold: CGFloat = 0.12
+    private static let flingThreshold: CGFloat = 180 // points per second
+    private static let minSettle: Double = 0.09
+    private static let maxSettle: Double = 0.20
+    private static let decelerate: Double = 1.5
+
     private let source: FeedSource
-    private let startKey: Int
     private let colors: FeedColors
     private let bottomInset: CGFloat
     private let backdrop: Backdrop
@@ -211,27 +227,36 @@ final class FeedController: UIViewController, UIPageViewControllerDataSource, UI
     private let onShare: (Int) -> Void
     private let onContext: (Int) -> Void
 
-    private let pager = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .vertical,
-                                             options: [.interPageSpacing: 0])
-    private let pages = NSHashTable<PageController>.weakObjects()
-    private var offsetObservation: NSKeyValueObservation?
-    private var currentKey: Int
+    private var keys: [Int?] = [nil, nil, nil]
+    private var pages: [PageController?] = [nil, nil, nil]
+    private let metrics = PageMetrics()
+    private var drag: CGFloat = 0
+    private var dragStart: CGFloat = 0
     private var travel = 0
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    /// Only the feed on screen drives the shared background (not one sliding away).
+    var active = false
+
+    private var settleLink: CADisplayLink?
+    private var settleFrom: CGFloat = 0
+    private var settleTo: CGFloat = 0
+    private var settleDir = 0
+    private var settleStart: CFTimeInterval = 0
+    private var settleDuration: Double = 0
+
     private var introLink: CADisplayLink?
     private var introStart: CFTimeInterval = 0
 
     init(source: FeedSource, startKey: Int, colors: FeedColors, bottomInset: CGFloat, backdrop: Backdrop,
          onPageChanged: @escaping (Int) -> Void, onShare: @escaping (Int) -> Void, onContext: @escaping (Int) -> Void) {
         self.source = source
-        self.startKey = startKey
         self.colors = colors
         self.bottomInset = bottomInset
         self.backdrop = backdrop
         self.onPageChanged = onPageChanged
         self.onShare = onShare
         self.onContext = onContext
-        currentKey = startKey
+        keys[1] = startKey
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -240,52 +265,221 @@ final class FeedController: UIViewController, UIPageViewControllerDataSource, UI
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
-        addChild(pager)
-        pager.view.backgroundColor = .clear
-        pager.view.frame = view.bounds
-        pager.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.addSubview(pager.view)
-        pager.didMove(toParent: self)
-        pager.dataSource = self
-        pager.delegate = self
-        let first = makePage(startKey, progress: UIAccessibility.isReduceMotionEnabled ? 1 : 0)
-        pager.setViewControllers([first], direction: .forward, animated: false)
-        if let scroll = pager.view.subviews.compactMap({ $0 as? UIScrollView }).first {
-            offsetObservation = scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
-                self?.scrolled()
-            }
-        }
-        backdrop.startSegment()
-        backdrop.animate(to: Palettes.forVerse(source.verse(startKey)))
+        view.clipsToBounds = true
+        keys[0] = keys[1].flatMap { source.prev($0) }
+        keys[2] = keys[1].flatMap { source.next($0) }
+        for k in 0..<3 { bind(k) }
+        pages[1]?.model.progress = UIAccessibility.isReduceMotionEnabled ? 1 : 0
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+        pan.delegate = self
+        view.addGestureRecognizer(pan)
         haptic.prepare()
+        backdrop.startSegment()
+        if let k = keys[1] { backdrop.animate(to: Palettes.forVerse(source.verse(k))) }
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        active = true
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        active = true
         playIntro()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        introLink?.invalidate()
-        introLink = nil
+        active = false
+        stopIntro()
+        settleLink?.invalidate()
+        settleLink = nil
     }
 
-    private func makePage(_ key: Int, progress: Double) -> PageController {
-        let model = PageModel(key: key, source: source, progress: progress)
-        let v = model.verseIndex
-        let pc = PageController(model: model, colors: colors, showContext: source.mode == .shuffle,
-                                bottomInset: bottomInset,
-                                onShare: { [weak self] in self?.onShare(v) },
-                                onContext: { [weak self] in self?.onContext(v) })
-        pages.add(pc)
-        return pc
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        if metrics.top != view.safeAreaInsets.top { metrics.top = view.safeAreaInsets.top }
+        if metrics.bottom != view.safeAreaInsets.bottom { metrics.bottom = view.safeAreaInsets.bottom }
     }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        for pc in pages.compactMap({ $0 }) { pc.view.bounds = CGRect(origin: .zero, size: view.bounds.size) }
+        layoutPages()
+    }
+
+    // MARK: pages
+
+    private func makePage(_ key: Int) -> PageController {
+        let model = PageModel(key: key, source: source, progress: 0)
+        let v = model.verseIndex
+        return PageController(model: model, metrics: metrics, colors: colors, showContext: source.mode == .shuffle,
+                              bottomInset: bottomInset,
+                              onShare: { [weak self] in self?.onShare(v) },
+                              onContext: { [weak self] in self?.onContext(v) })
+    }
+
+    private func bind(_ k: Int) {
+        if let old = pages[k] {
+            old.willMove(toParent: nil)
+            old.view.removeFromSuperview()
+            old.removeFromParent()
+            pages[k] = nil
+        }
+        guard let key = keys[k] else { return }
+        let pc = makePage(key)
+        addChild(pc)
+        pc.view.frame = view.bounds
+        view.addSubview(pc.view)
+        pc.didMove(toParent: self)
+        pages[k] = pc
+    }
+
+    /// Positions the three pages, sets each page's arrival progress from its distance to the
+    /// centre, and blends the background toward the page being revealed.
+    private func layoutPages() {
+        let h = view.bounds.height
+        guard h > 0 else { return }
+        for k in 0..<3 {
+            guard let pc = pages[k] else { continue }
+            let y = CGFloat(k - 1) * h + drag
+            pc.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY + y)
+            let o = Double(y / h)
+            if !(k == 1 && introLink != nil) { pc.model.progress = 1 - min(1, abs(o)) }
+        }
+        guard active, let cur = keys[1] else { return }
+        let off = Double(-drag / h)
+        let to: Int? = off > 0 ? keys[2] : (off < 0 ? keys[0] : nil)
+        let from = Palettes.forVerse(source.verse(cur))
+        let target = to.map { Palettes.forVerse(source.verse($0)) } ?? from
+        backdrop.update(from: from, to: target, t: min(1, abs(off)), travel: Double(travel) + off)
+    }
+
+    // MARK: gestures
+
+    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        guard let pan = g as? UIPanGestureRecognizer else { return true }
+        let v = pan.velocity(in: view)
+        return abs(v.y) > abs(v.x)
+    }
+
+    @objc private func panned(_ g: UIPanGestureRecognizer) {
+        switch g.state {
+        case .began:
+            finishSettle() // swiping again mid-animation chains straight on
+            stopIntro()
+            dragStart = drag
+        case .changed:
+            applyDrag(dragStart + g.translation(in: view).y)
+        case .ended, .cancelled, .failed:
+            release(velocity: g.velocity(in: view).y)
+        default:
+            break
+        }
+    }
+
+    private func applyDrag(_ target: CGFloat) {
+        let h = view.bounds.height
+        guard h > 0 else { return }
+        var next = target
+        let atStart = keys[0] == nil, atEnd = keys[2] == nil
+        if (next > 0 && atStart) || (next < 0 && atEnd) {
+            next = max(-h * 0.2, min(h * 0.2, next * 0.35)) // rubber band at the ends
+        }
+        drag = max(-h, min(h, next))
+        layoutPages()
+    }
+
+    private func release(velocity vy: CGFloat) {
+        let h = view.bounds.height
+        var dir = 0
+        if abs(vy) > FeedController.flingThreshold { dir = vy < 0 ? 1 : -1 } // flick up = next
+        else if drag < -h * FeedController.distanceThreshold { dir = 1 }
+        else if drag > h * FeedController.distanceThreshold { dir = -1 }
+        if dir == 1 && drag > 0 { dir = 0 }
+        if dir == -1 && drag < 0 { dir = 0 }
+        if dir == 1 && keys[2] == nil { dir = 0 }
+        if dir == -1 && keys[0] == nil { dir = 0 }
+        settle(dir, speed: dir == 0 ? 0 : abs(vy))
+    }
+
+    /// Animates to the next (1), previous (-1) or back to the current (0) page, starting at the
+    /// finger's speed so a flick carries straight on.
+    private func settle(_ dir: Int, speed: CGFloat) {
+        let h = view.bounds.height
+        settleLink?.invalidate()
+        settleLink = nil
+        let to = -CGFloat(dir) * h
+        let dist = abs(to - drag)
+        if h <= 0 || dist < 1 {
+            drag = to
+            if dir != 0 { commit(dir) } else { layoutPages() }
+            return
+        }
+        var t: Double
+        if speed > 0 { t = 2 * FeedController.decelerate * Double(dist / speed) } // match initial speed
+        else { t = 0.11 + 0.09 * Double(dist / h) }
+        t = max(FeedController.minSettle, min(FeedController.maxSettle, t))
+        settleFrom = drag
+        settleTo = to
+        settleDir = dir
+        settleStart = CACurrentMediaTime()
+        settleDuration = t
+        let link = CADisplayLink(target: self, selector: #selector(settleStep))
+        link.add(to: .main, forMode: .common)
+        settleLink = link
+    }
+
+    @objc private func settleStep() {
+        let t = min(1, (CACurrentMediaTime() - settleStart) / settleDuration)
+        let eased = 1 - pow(1 - t, 2 * FeedController.decelerate)
+        drag = settleFrom + (settleTo - settleFrom) * CGFloat(eased)
+        layoutPages()
+        if t >= 1 {
+            settleLink?.invalidate()
+            settleLink = nil
+            if settleDir != 0 { commit(settleDir) }
+        }
+    }
+
+    /// If a page is still settling, jump to where it was going so the next swipe starts fresh.
+    private func finishSettle() {
+        guard settleLink != nil else { return }
+        settleLink?.invalidate()
+        settleLink = nil
+        drag = settleTo
+        if settleDir != 0 { commit(settleDir) } else { layoutPages() }
+    }
+
+    private func commit(_ dir: Int) {
+        if dir > 0 {
+            if let old = pages[0] { old.willMove(toParent: nil); old.view.removeFromSuperview(); old.removeFromParent() }
+            pages = [pages[1], pages[2], nil]
+            keys = [keys[1], keys[2], keys[2].flatMap { source.next($0) }]
+            travel += 1
+            drag = 0
+            bind(2)
+        } else {
+            if let old = pages[2] { old.willMove(toParent: nil); old.view.removeFromSuperview(); old.removeFromParent() }
+            pages = [nil, pages[0], pages[1]]
+            keys = [keys[1].flatMap { source.prev($0) }, keys[0], keys[1]]
+            travel -= 1
+            drag = 0
+            bind(0)
+        }
+        layoutPages()
+        haptic.impactOccurred() // light tick per page
+        haptic.prepare()
+        if let k = keys[1] { onPageChanged(k) }
+    }
+
+    // MARK: intro
 
     /// When the feed opens, the first page arrives: box, then words, then buttons (0.55 s).
     private func playIntro() {
-        guard !UIAccessibility.isReduceMotionEnabled,
-              let pc = pager.viewControllers?.first as? PageController, pc.model.progress < 1 else { return }
+        guard introLink == nil, !UIAccessibility.isReduceMotionEnabled,
+              let pc = pages[1], pc.model.progress < 1 else { return }
         introStart = CACurrentMediaTime()
         let link = CADisplayLink(target: self, selector: #selector(introStep))
         link.add(to: .main, forMode: .common)
@@ -294,60 +488,13 @@ final class FeedController: UIViewController, UIPageViewControllerDataSource, UI
 
     @objc private func introStep() {
         let t = min(1, (CACurrentMediaTime() - introStart) / 0.55)
-        (pager.viewControllers?.first as? PageController)?.model.progress = t
-        if t >= 1 {
-            introLink?.invalidate()
-            introLink = nil
-        }
+        pages[1]?.model.progress = t
+        if t >= 1 { stopIntro() }
     }
 
-    /// Every scroll frame: each visible page's arrival follows its distance from the centre, and
-    /// the background blends toward the page being revealed.
-    private func scrolled() {
-        let h = view.bounds.height
-        guard h > 0 else { return }
-        if introLink != nil {
-            introLink?.invalidate()
-            introLink = nil
-        }
-        var off = 0.0
-        for pc in pages.allObjects where pc.isViewLoaded && pc.view.window != nil {
-            let y = pc.view.convert(CGPoint.zero, to: view).y
-            let o = Double(y / h)
-            pc.model.progress = 1 - min(1, abs(o))
-            if pc.model.key == currentKey { off = -o }
-        }
-        let to: Int? = off > 0 ? source.next(currentKey) : (off < 0 ? source.prev(currentKey) : nil)
-        let from = Palettes.forVerse(source.verse(currentKey))
-        let target = to.map { Palettes.forVerse(source.verse($0)) } ?? from
-        backdrop.update(from: from, to: target, t: min(1, abs(off)), travel: Double(travel) + off)
-    }
-
-    // MARK: data source
-
-    func pageViewController(_ pvc: UIPageViewController, viewControllerBefore vc: UIViewController) -> UIViewController? {
-        guard let pc = vc as? PageController, let k = source.prev(pc.model.key) else { return nil }
-        return makePage(k, progress: 0)
-    }
-
-    func pageViewController(_ pvc: UIPageViewController, viewControllerAfter vc: UIViewController) -> UIViewController? {
-        guard let pc = vc as? PageController, let k = source.next(pc.model.key) else { return nil }
-        return makePage(k, progress: 0)
-    }
-
-    // MARK: delegate
-
-    func pageViewController(_ pvc: UIPageViewController, didFinishAnimating finished: Bool,
-                            previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-        guard completed, let pc = pvc.viewControllers?.first as? PageController else { return }
-        let k = pc.model.key
-        guard k != currentKey else { return }
-        travel += k > currentKey ? 1 : -1
-        currentKey = k
-        pc.model.progress = 1
-        haptic.impactOccurred()
-        haptic.prepare()
-        onPageChanged(k)
+    private func stopIntro() {
+        introLink?.invalidate()
+        introLink = nil
     }
 }
 
@@ -366,6 +513,10 @@ struct FeedPager: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: FeedController, context: Context) {}
+
+    static func dismantleUIViewController(_ vc: FeedController, coordinator: ()) {
+        vc.active = false // a feed sliding away must not repaint the shared background
+    }
 }
 
 // MARK: - Screen
@@ -395,7 +546,14 @@ struct FeedScreen: View {
                   onShare: { app.share($0) },
                   onContext: { v in app.go(.feed(.read, v), from: .leading) })
             .ignoresSafeArea()
-            .onAppear { app.counterVerse = session.counterVerse }
+            .onAppear {
+                if app.counterVerse == nil {
+                    // Arriving from another tab: the counter slides in with the feed.
+                    withAnimation(.snappy(duration: 0.32)) { app.counterVerse = session.counterVerse }
+                } else {
+                    app.counterVerse = session.counterVerse // feed to feed: it stays put
+                }
+            }
     }
 }
 

@@ -95,11 +95,12 @@ final class AppState: ObservableObject {
     func go(_ s: Screen, from edge: Edge) {
         pushEdge = edge
         fadeTransition = false
-        if case .feed = s {} else { counterVerse = nil }
         DispatchQueue.main.async {
             withAnimation(.snappy(duration: 0.32)) {
                 self.screen = s
                 self.screenID = UUID()
+                // Leaving the feed: the verse counter slides out with it.
+                if !s.isFeed { self.counterVerse = nil }
             }
         }
     }

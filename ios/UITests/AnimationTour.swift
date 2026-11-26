@@ -34,6 +34,12 @@ final class AnimationTour: XCTestCase {
             .press(forDuration: 0.05, thenDragTo: w.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)),
                    withVelocity: .slow, thenHoldForDuration: 0.1)
         pause(1.5)
+        // A short, slow drag (~17% of the screen): Android turns the page past 12%.
+        step("swipe-short")
+        w.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+            .press(forDuration: 0.05, thenDragTo: w.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)),
+                   withVelocity: .slow, thenHoldForDuration: 0.2)
+        pause(1.5)
         step("swipe-fast"); w.swipeUp(velocity: .fast); pause(1.2)
         step("swipe-back"); w.swipeDown(velocity: .fast); pause(1.2)
 
